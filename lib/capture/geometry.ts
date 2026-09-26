@@ -23,6 +23,27 @@ export function sameBounds(a: Rect, b: Rect, tolerance = 0.5): boolean {
   return (['x', 'y', 'width', 'height'] as const).every(key => Math.abs(a[key] - b[key]) <= tolerance);
 }
 
+export function isTranslation(matrix: ArrayLike<number>): boolean {
+  // DOMMatrix is column-major. Translation changes position, not the silhouette;
+  // getBoundingClientRect already includes it, including on carousel ancestors.
+  return matrix.length === 16 && Array.from(matrix).every((value, index) =>
+    Number.isFinite(value) && (index >= 12 && index <= 14 || value === (index % 5 === 0 ? 1 : 0)));
+}
+
+export function clientClipBounds(bounds: Rect, client: Size & { left: number; top: number },
+  border: { left: number; top: number; right: number; bottom: number }): Rect {
+  const width = bounds.width - border.left - border.right;
+  const height = bounds.height - border.top - border.bottom;
+  // clientWidth/Height are integers. Use them to measure scrollbar gutters, not
+  // as fractional clip edges: a 301.25px container can report clientHeight 301.
+  return {
+    x: bounds.x + border.left + Math.max(0, client.left - Math.round(border.left)),
+    y: bounds.y + border.top + Math.max(0, client.top - Math.round(border.top)),
+    width: width - Math.max(0, Math.round(width) - client.width),
+    height: height - Math.max(0, Math.round(height) - client.height),
+  };
+}
+
 export function mapCrop(rect: Rect, viewport: Viewport, bitmap: Size) {
   validateBounds(rect, viewport);
   if (![bitmap.width, bitmap.height].every(n => Number.isSafeInteger(n) && n > 0 && n <= 32768) ||

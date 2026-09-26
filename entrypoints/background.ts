@@ -51,6 +51,7 @@ export default defineBackground(() => {
     if (capturing || Date.now() - lastCapture < 600) return fail('Please wait a moment before grabbing again.');
     capturing = true;
     let changed = false;
+    let captureUrl: string | undefined;
     const onActivated = (info: Browser.tabs.OnActivatedInfo) => { if (info.windowId === windowId) changed = true; };
     const onFocus = (focusedWindow: number) => { if (focusedWindow !== windowId) changed = true; };
     const onUpdated = (id: number, info: Browser.tabs.OnUpdatedInfo) => {
@@ -65,9 +66,14 @@ export default defineBackground(() => {
     const validate = async () => {
       const tabs = await browser.tabs.query({ active: true, windowId });
       const tab = tabs[0];
-      if (changed || !tab || tab.id !== tabId || tab.windowId !== windowId || tab.url !== sender.url || tab.status === 'loading') {
+      if (changed || !tab || tab.id !== tabId || tab.windowId !== windowId || !tab.url ||
+        !/^https?:\/\//.test(tab.url) || (captureUrl !== undefined && tab.url !== captureUrl) || tab.status === 'loading') {
         throw new Error('The active page changed during capture. Return to the page and try again.');
       }
+      // A content-script sender can retain the document's original URL after SPA
+      // navigation. Pin the live route here; the documentId handshake below still
+      // requires the exact originating document and capture job before and after.
+      captureUrl ??= tab.url;
       const message: VerifyMessage = { ...id, type: 'irida:verify' };
       const reply: unknown = await browser.tabs.sendMessage(tabId!, message, { documentId: sender.documentId! });
       if (changed || !isRecord(reply) || reply.ok !== true || !matchesRequest(id, reply as unknown as VerifyMessage)) {

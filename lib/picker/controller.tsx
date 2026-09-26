@@ -150,7 +150,9 @@ export class PickerController {
       if (event.key === 'ArrowUp') {
         let parent = composedParent(this.target);
         while (parent) {
-          if (isUseful(parent, this.ui.shadowHost) && !sameBounds(freshBounds(parent), freshBounds(this.target))) {
+          // Equal rectangles are not redundant when the parent supplies the card's corners.
+          if (isUseful(parent, this.ui.shadowHost) && (!sameBounds(freshBounds(parent), freshBounds(this.target)) ||
+            getComputedStyle(parent).borderRadius !== getComputedStyle(this.target).borderRadius)) {
             this.parents.push(this.target); this.target = parent; break;
           }
           parent = composedParent(parent);

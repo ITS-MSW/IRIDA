@@ -1,5 +1,5 @@
 import { composedParent, freshBounds } from '../picker/react-grab-adapter';
-import { sameBounds, validateBounds, type Rect, type Viewport } from './geometry';
+import { clientClipBounds, isTranslation, sameBounds, validateBounds, type Rect, type Viewport } from './geometry';
 
 export interface TargetSnapshot {
   rect: Rect;
@@ -55,7 +55,10 @@ export function inspectTarget(element: Element): TargetSnapshot {
   if (element.getClientRects().length !== 1) throw new Error('Choose a single rectangular element.');
   for (let current: Element | null = element; current; current = composedParent(current)) {
     const style = getComputedStyle(current);
-    if (style.transform !== 'none' || style.rotate !== 'none' || style.scale !== 'none' || style.translate !== 'none' ||
+    const transformed = style.transform !== 'none' && !isTranslation(new DOMMatrixReadOnly(style.transform).toFloat64Array());
+    const rotated = style.rotate !== 'none' && parseFloat(style.rotate.split(/\s+/).at(-1)!) !== 0;
+    const scaled = style.scale !== 'none' && style.scale.split(/\s+/).some(value => Number(value) !== 1);
+    if (transformed || rotated || scaled ||
       (style.zoom !== '1' && style.zoom !== 'normal') || style.perspective !== 'none' ||
       style.clipPath !== 'none' || style.maskImage !== 'none') {
       throw new Error('Transformed or clipped elements are not supported. Choose an ordinary card or section.');
@@ -65,12 +68,15 @@ export function inspectTarget(element: Element): TargetSnapshot {
     }
     // A target can fit the viewport and still be chopped by a nested scroll container.
     if (current !== element && current !== document.body && current !== document.documentElement) {
-      const bounds = current.getBoundingClientRect();
-      const left = bounds.left + current.clientLeft;
-      const top = bounds.top + current.clientTop;
+      const bounds = clientClipBounds(freshBounds(current), {
+        left: current.clientLeft, top: current.clientTop, width: current.clientWidth, height: current.clientHeight,
+      }, {
+        left: parseFloat(style.borderLeftWidth), top: parseFloat(style.borderTopWidth),
+        right: parseFloat(style.borderRightWidth), bottom: parseFloat(style.borderBottomWidth),
+      });
       const clips = (overflow: string) => ['hidden', 'clip', 'scroll', 'auto'].includes(overflow);
-      if ((clips(style.overflowX) && (rect.x < left - 0.05 || rect.x + rect.width > left + current.clientWidth + 0.05)) ||
-        (clips(style.overflowY) && (rect.y < top - 0.05 || rect.y + rect.height > top + current.clientHeight + 0.05))) {
+      if ((clips(style.overflowX) && (rect.x < bounds.x - 0.05 || rect.x + rect.width > bounds.x + bounds.width + 0.05)) ||
+        (clips(style.overflowY) && (rect.y < bounds.y - 0.05 || rect.y + rect.height > bounds.y + bounds.height + 0.05))) {
         throw new Error('This element is clipped by its container. Bring the whole element into view.');
       }
     }
