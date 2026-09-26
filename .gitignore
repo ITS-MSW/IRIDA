@@ -1,0 +1,6 @@
+node_modules/
+.wxt/
+.output/
+output/
+.playwright-cli/
+.DS_Store

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>IRIDA capture fixture</title>
+  <style>
+    * { box-sizing: border-box; }
+    html { color-scheme: light; scrollbar-gutter: stable; }
+    body { margin: 0; background: #eeefed; color: #232827; font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { width: min(960px, calc(100% - 80px)); margin: 48px auto; }
+    h1 { margin: 0; font-size: 32px; letter-spacing: -1.2px; }
+    h2 { margin: 0 0 8px; font-size: 25px; letter-spacing: -.7px; }
+    p { margin: 0 0 24px; color: #5b6662; }
+    .intro { margin-bottom: 36px; }
+    .row { display: flex; gap: 32px; align-items: flex-start; }
+    .card { width: 384px; flex-shrink: 0; padding: 30px; border: 1px solid #d5ddd6; border-radius: 22px; background: #fff; }
+    .icon { display: grid; place-items: center; width: 44px; height: 44px; margin-bottom: 26px; border-radius: 12px; background: #e7eee6; color: #3e5542; }
+    .card ul { list-style: none; padding: 0; margin: 24px 0 28px; border-top: 1px solid #e6e9e5; }
+    .card li { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e6e9e5; font-size: 14px; }
+    button, a.button { display: inline-flex; align-items: center; justify-content: center; gap: 10px; padding: 12px 18px; border: 0; border-radius: 9px; font: inherit; font-weight: 600; cursor: pointer; background: #3d5341; color: white; text-decoration: none; }
+    button:focus-visible, a:focus-visible { outline: 3px solid #9b7bdd; outline-offset: 4px; }
+    .card button { width: 100%; }
+    .checks { max-width: 360px; padding-top: 8px; }
+    .checks button, .checks a { margin: 0 0 12px; }
+    output { display: block; margin-bottom: 24px; font-weight: 600; }
+    .wide { background: #23382c; color: #fff; padding: 40px; margin-top: 64px; }
+    .wide p { color: #c2d3c6; max-width: 600px; margin: 0; }
+    .spacer { min-height: 700px; display: grid; place-items: center; }
+    .scrolled { margin-bottom: 120px; }
+    dialog { padding: 32px; border: 1px solid #ddd; border-radius: 20px; width: 420px; background: #fff; color: #232827; }
+    dialog::backdrop { background: #16251d88; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="intro"><h1>A little room to focus.</h1><p>Make space for the work that matters.</p></div>
+    <div class="row">
+      <article class="card" id="rounded-card">
+        <div class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-label="Leaf"><path d="M20 4C10 3 4 8 5 14c1 7 12 7 15-10Z" stroke="currentColor" stroke-width="1.6"/><path d="m5 20 10-10" stroke="currentColor" stroke-width="1.6"/></svg></div>
+        <h2>Your next chapter</h2><p>A calm place for your ideas.<br>Built around the way you work.</p>
+        <ul><li><span>Projects</span><strong>Unlimited</strong></li><li><span>Personal workspace</span><strong>Included</strong></li></ul>
+        <button id="counter-button"><span>Start creating</span><span aria-hidden="true">↗</span></button>
+      </article>
+      <aside class="checks">
+        <h2>Interaction checks</h2><output id="counter" aria-live="polite">Button clicks: 0</output>
+        <button id="open-modal">Open modal</button><br><a class="button" href="#destination" id="navigation-link">Jump to section</a>
+        <p>Hover nested text or the icon, then use ↑ to choose the card. Grabbing must leave the click count unchanged.</p>
+      </aside>
+    </div>
+    <section class="wide" id="wide-section"><h2>Everything has its place.</h2><p>A wide, square section for checking bounds, readable text, and an adaptive export that keeps the original proportions.</p></section>
+    <div class="spacer"><p>Scroll down for another card.</p></div>
+    <article class="card scrolled" id="destination"><h2>A fresh perspective</h2><p>This card lives below the fold. Scroll it fully into view before grabbing it.</p><a class="button" href="#rounded-card">Back to the beginning</a></article>
+  </main>
+  <dialog id="modal"><h2>Space for something new</h2><p>Grab this entire dialog or a nested element without dismissing it.</p><button id="close-modal">Done</button></dialog>
+  <script>
+    let clicks = 0;
+    document.querySelector('#counter-button').addEventListener('click', () => { document.querySelector('#counter').textContent = `Button clicks: ${++clicks}`; });
+    document.querySelector('#open-modal').addEventListener('click', () => document.querySelector('#modal').showModal());
+    document.querySelector('#close-modal').addEventListener('click', () => document.querySelector('#modal').close());
+  </script>
+</body>
+</html>
