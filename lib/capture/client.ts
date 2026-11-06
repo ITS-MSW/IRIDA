@@ -37,9 +37,9 @@ export async function captureSubject(message: CaptureMessage, snapshot: TargetSn
     canvas.height = crop.height;
     const context = canvas.getContext('2d');
     if (!context) throw new Error('Canvas is unavailable on this page.');
-    if (snapshot.radius > 0) {
+    if (snapshot.radii) {
       context.beginPath();
-      context.roundRect(0, 0, crop.width, crop.height, { x: snapshot.radius * crop.scaleX, y: snapshot.radius * crop.scaleY });
+      context.roundRect(0, 0, crop.width, crop.height, snapshot.radii.map(radius => ({ x: radius.x * crop.scaleX, y: radius.y * crop.scaleY })));
       context.clip();
     }
     context.drawImage(bitmap, crop.x, crop.y, crop.width, crop.height, 0, 0, crop.width, crop.height);

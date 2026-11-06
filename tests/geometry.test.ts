@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { clientClipBounds, compositionLayout, isTranslation, mapCrop, sameBounds, validateBounds } from '../lib/capture/geometry';
+import { clientClipBounds, compositionLayout, matrixScale, mapCrop, resolveRadii, sameBounds, validateBounds } from '../lib/capture/geometry';
 import { isCaptureMessage, isCaptureResponse, matchesRequest } from '../lib/messaging';
 
 const viewport = { width: 1280, height: 800, contentWidth: 1265, contentHeight: 800 };
@@ -8,9 +8,13 @@ const id = { sessionId: '11111111-1111-4111-8111-111111111111', requestId: '2222
 const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 
 test('capture geometry and composition preserve pixels across density, zoom, rounding, and scrollbars', () => {
-  expect(isTranslation(identity)).toBe(true);
-  expect(isTranslation(identity.with(12, 432.5))).toBe(true);
-  expect(isTranslation(identity.with(12, -720.25).with(13, 24).with(14, 1))).toBe(true);
+  expect(matrixScale(identity)).toEqual({ x: 1, y: 1 });
+  expect(matrixScale(identity.with(12, 432.5))).toEqual({ x: 1, y: 1 });
+  expect(matrixScale(identity.with(0, 1.25).with(5, 0.8).with(12, -720.25).with(13, 24).with(14, 1))).toEqual({ x: 1.25, y: 0.8 });
+  expect(resolveRadii(['200px', '200px', '200px', '200px'], { width: 300, height: 200 }, { x: 1, y: 1 }))
+    .toEqual([{ x: 100, y: 100 }, { x: 100, y: 100 }, { x: 100, y: 100 }, { x: 100, y: 100 }]);
+  expect(resolveRadii(['10px 20px', '0px', '25% 50%', '0px'], { width: 300, height: 200 }, { x: 2, y: 0.5 }))
+    .toEqual([{ x: 20, y: 10 }, { x: 0, y: 0 }, { x: 75, y: 100 }, { x: 0, y: 0 }]);
   for (const scale of [1, 1.25, 1.5, 2, 2.5]) {
     const crop = mapCrop(rect, viewport, { width: viewport.width * scale, height: viewport.height * scale });
     expect(crop.x).toBe(Math.round(rect.x * scale));
@@ -50,9 +54,9 @@ test('capture geometry and composition preserve pixels across density, zoom, rou
 });
 
 test('reject invalid, clipped, moved, mismatched, or stale captures instead of exporting a wrong crop', () => {
-  for (const matrix of [identity.with(0, 1.1), identity.with(1, 0.2), identity.with(4, -0.2),
+  for (const matrix of [identity.with(0, -1), identity.with(1, 0.2), identity.with(4, -0.2),
     identity.with(11, -0.001), identity.with(12, NaN), identity.slice(0, 6)]) {
-    expect(isTranslation(matrix)).toBe(false);
+    expect(matrixScale(matrix)).toBeNull();
   }
   for (const invalid of [
     { ...rect, x: NaN }, { ...rect, width: 0 }, { ...rect, height: -1 }, { ...rect, x: -0.1 },

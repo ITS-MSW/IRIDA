@@ -25,7 +25,10 @@ export async function renderShowcase(subject: HTMLCanvasElement, scaleX: number,
   try {
     const context = canvas.getContext('2d');
     if (!context) throw new Error('Canvas is unavailable on this page.');
-    await drawBackdrop(context, preset.backdropSvg, canvas.width, canvas.height);
+    if (preset.backgroundColor) {
+      context.fillStyle = preset.backgroundColor;
+      context.fillRect(0, 0, canvas.width, canvas.height);
+    } else await drawBackdrop(context, preset.backdropSvg, canvas.width, canvas.height);
     context.imageSmoothingQuality = 'high';
     context.shadowColor = preset.shadow.color;
     context.shadowBlur = preset.shadow.blur * Math.min(scaleX, scaleY) * layout.scale;

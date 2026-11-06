@@ -1,4 +1,56 @@
-# Verification — 2026-09-26
+# Verification
+
+## 2026-11-06 preview appearance and copy
+
+Production extension rebuilt and reloaded in the user's installed Brave. The existing local fixture was served at `http://127.0.0.1:4173` in a separate QA window.
+
+- Rounded and unequal-corner cards visually retain their silhouettes; the source-page corner patches recorded below are absent. The validator now accepts both `round` and its computed equivalent `superellipse(1)`.
+- Lavender, Sand, Midnight, and solid backgrounds exercised. Custom `#b7d9c4` visibly produced a green background. A hex field replaces the native color well, which did not open reliably during this overlay QA.
+- Padding changes update the preview dimensions (64: 1024 × 1103; 16: 832 × 911; 160: 1408 × 1487). Shadow on/off exercised.
+- Copy image reports success from the resolved clipboard write, including after editing. Pasting into another app was not verified: Preview app access timed out.
+- Save PNG completed a real download (`showcase-20261106-220950.png`, 1408 × 1487). The downloaded file was opened and visually inspected: complete rounded card, white background, large padding, no presentation shadow, matching the chosen settings.
+- Close restores page interaction: the fixture counter increments normally afterward. Grab again captures successfully and resets to Lavender, 64px padding, shadow on, without stale copy feedback.
+- Typecheck, production build/manifest checks, and all six existing tests (141 assertions) pass. No new tests were added in this change; the earlier uncommitted tests are included with user approval.
+
+Limits: this pass does not repeat the historical live-site matrix below, exhaustively exercise focus trapping, induce composition/clipboard failures, or verify cross-app paste. Stale-render rejection and resource cleanup were reviewed in the controller; no browser heap profiling was performed. The final production build remains loaded in Brave.
+
+## 2026-10-10 compatibility changes — automated and Brave verification
+
+`bun test tests/target.test.ts` reproduced six rejections through the real `inspectTarget` path before changes: unequal corners, elliptical corners, transparent rounded wrappers, partial opacity, CSS scale, and CSS zoom. The test supplies controlled computed styles and DOM measurements; it does not emulate a browser renderer or prove exported pixels.
+
+After the changes:
+
+- `bun test`: **6 pass, 0 fail, 141 assertions**. Includes expected radii, scaled ancestor clipping, opacity changes, related/unrelated scrolling, and the existing crop/message/worker safeguards.
+- `bun run typecheck`: passes.
+- `bun run build`: passes; generated MV3 permissions remain `activeTab` + `scripting` only.
+- `git diff --check`: passes.
+- Added hover-time eligibility guidance and kept invalid confirmation in picking mode instead of opening an error dialog.
+- Extended the existing fixture with a Card appearance selector and independently scrolling panel for the remaining browser checks.
+
+### Brave QA result at that time
+
+The production extension was rebuilt and reloaded in installed Brave **154.1.96.60** through Computer Use. Toolbar activation, parent/child navigation, preview, Save PNG, Grab again, Escape, click suppression, and recovery from an invalid selection were exercised. Eleven actual PNGs were saved under `output/brave-qa-2026-10-10/` and their encoded dimensions checked.
+
+**One confirmed visual defect remains:** ordinary rounded cards and dialogs retain rectangular patches of the source page outside their corners. Brave reports the fixture's computed `corner-shape` as `superellipse(1)` for its ordinary 22px radius; `lib/capture/target.ts:29-30` accepts only `round`, so it returns no mask. The defect appears on the local fixture and live ASFAR carousel card. This build is not visually cleared for release; no capture code was changed during this QA run.
+
+| Case | Target tests | Current Brave result |
+| --- | --- | --- |
+| Unequal or elliptical corners | Accepted, resolved radii asserted | Both export 1024 × 1103; rounded-mask defect remains |
+| Transparent rounded wrapper | Accepted as visible rectangle | 1024 × 1103; expected page pixels retained |
+| Stable partial opacity | Accepted; changing opacity still aborts | 1024 × 1103; composited appearance retained; corner defect |
+| Positive axis-aligned scale | Accepted; nested scale/clipping asserted | 909 × 1018; correct content and bounds; corner defect |
+| CSS zoom plus unrelated panel scroll | Zoom accepted; unrelated scroll ignored | 947 × 1014 while unrelated panel scrolls; no false abort; corner defect |
+| Clipped, rotated, off-screen targets | Rejected | Hover warning and rejected click keep picker open; visible-child recovery succeeds |
+| Removed/moved targets during capture | Rejected in controlled tests | Not repeated in this browser run |
+| Native modal | Existing support | 1096 × 726; original modal remains usable; corner defect |
+| Live ASFAR | Existing support | Navigation 2560 × 360 and carousel card 861 × 1106 saved; card corner defect reproduced |
+| Live DHAD | Historical dashboard evidence below | Dashboard redirects to login; public login form saved at 1056 × 732 |
+
+Local detailed report and evidence: [Brave QA report](output/brave-qa-2026-10-10/report.md), [modal defect](output/brave-qa-2026-10-10/native-modal.png), [ASFAR card defect](output/brave-qa-2026-10-10/asfar-carousel-card.png). These artifacts are Git-ignored. Preview images were visually inspected; downloaded rounded, modal, scaled, and ASFAR card files were also opened directly.
+
+Remaining: fix and visually recheck rounded masking, retest the authenticated DHAD dashboard when a session is available, and broaden site/display coverage. Browser zoom, target removal, active-tab/route changes during capture, and exhaustive console checks were not repeated. The installed extension now uses the rebuilt production files; previous browser-access denial no longer blocks this environment.
+
+## 2026-09-26 browser-verified baseline
 
 ## Automated checks
 
