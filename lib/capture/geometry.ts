@@ -1,6 +1,8 @@
 export interface Rect { x: number; y: number; width: number; height: number }
 export interface Size { width: number; height: number }
 export interface Viewport extends Size { contentWidth: number; contentHeight: number }
+export interface Scale { x: number; y: number }
+export type CornerRadii = [Scale, Scale, Scale, Scale];
 
 const ROUNDING_TOLERANCE = 0.05;
 
@@ -23,24 +25,42 @@ export function sameBounds(a: Rect, b: Rect, tolerance = 0.5): boolean {
   return (['x', 'y', 'width', 'height'] as const).every(key => Math.abs(a[key] - b[key]) <= tolerance);
 }
 
-export function isTranslation(matrix: ArrayLike<number>): boolean {
-  // DOMMatrix is column-major. Translation changes position, not the silhouette;
-  // getBoundingClientRect already includes it, including on carousel ancestors.
-  return matrix.length === 16 && Array.from(matrix).every((value, index) =>
-    Number.isFinite(value) && (index >= 12 && index <= 14 || value === (index % 5 === 0 ? 1 : 0)));
+export function matrixScale(matrix: ArrayLike<number>): Scale | null {
+  // Positive axis-aligned scale and translation retain a rectangular silhouette.
+  const valid = matrix.length === 16 && Array.from(matrix).every((value, index) =>
+    Number.isFinite(value) && (index === 0 || index === 5 ? value > 0 :
+      index >= 12 && index <= 14 || value === (index % 5 === 0 ? 1 : 0)));
+  return valid ? { x: matrix[0]!, y: matrix[5]! } : null;
+}
+
+export function resolveRadii(corners: string[], size: Size, scale: Scale): CornerRadii | null {
+  const length = (value: string, extent: number, factor: number) => {
+    if (!/^(?:\d*\.)?\d+(?:px|%)?$/.test(value)) return NaN;
+    return parseFloat(value) * (value.endsWith('%') ? extent / 100 : factor);
+  };
+  const radii = corners.map(corner => {
+    const [x = '', y = x] = corner.trim().split(/\s+/);
+    return { x: length(x, size.width, scale.x), y: length(y, size.height, scale.y) };
+  });
+  if (radii.length !== 4 || radii.some(r => !Number.isFinite(r.x) || !Number.isFinite(r.y))) return null;
+  const [tl, tr, br, bl] = radii as CornerRadii;
+  // CSS reduces all corners by one factor when adjacent radii overlap.
+  const factor = Math.min(1, size.width / (tl.x + tr.x), size.width / (bl.x + br.x),
+    size.height / (tl.y + bl.y), size.height / (tr.y + br.y));
+  return radii.map(r => ({ x: r.x * factor, y: r.y * factor })) as CornerRadii;
 }
 
 export function clientClipBounds(bounds: Rect, client: Size & { left: number; top: number },
-  border: { left: number; top: number; right: number; bottom: number }): Rect {
-  const width = bounds.width - border.left - border.right;
-  const height = bounds.height - border.top - border.bottom;
+  border: { left: number; top: number; right: number; bottom: number }, scale: Scale = { x: 1, y: 1 }): Rect {
+  const width = bounds.width / scale.x - border.left - border.right;
+  const height = bounds.height / scale.y - border.top - border.bottom;
   // clientWidth/Height are integers. Use them to measure scrollbar gutters, not
   // as fractional clip edges: a 301.25px container can report clientHeight 301.
   return {
-    x: bounds.x + border.left + Math.max(0, client.left - Math.round(border.left)),
-    y: bounds.y + border.top + Math.max(0, client.top - Math.round(border.top)),
-    width: width - Math.max(0, Math.round(width) - client.width),
-    height: height - Math.max(0, Math.round(height) - client.height),
+    x: bounds.x + (border.left + Math.max(0, client.left - Math.round(border.left))) * scale.x,
+    y: bounds.y + (border.top + Math.max(0, client.top - Math.round(border.top))) * scale.y,
+    width: (width - Math.max(0, Math.round(width) - client.width)) * scale.x,
+    height: (height - Math.max(0, Math.round(height) - client.height)) * scale.y,
   };
 }
 

@@ -23,6 +23,10 @@
     .card button { width: 100%; }
     .checks { max-width: 360px; padding-top: 8px; }
     .checks button, .checks a { margin: 0 0 12px; }
+    .checks label { display: block; margin-bottom: 8px; }
+    .checks select { width: 100%; padding: 8px; margin-bottom: 16px; font: inherit; }
+    #card-container { flex-shrink: 0; }
+    #independent-scroll { height: 48px; overflow: auto; margin-top: 16px; }
     output { display: block; margin-bottom: 24px; font-weight: 600; }
     .wide { background: #23382c; color: #fff; padding: 40px; margin-top: 64px; }
     .wide p { color: #c2d3c6; max-width: 600px; margin: 0; }
@@ -36,15 +40,25 @@
   <main>
     <div class="intro"><h1>A little room to focus.</h1><p>Make space for the work that matters.</p></div>
     <div class="row">
-      <article class="card" id="rounded-card">
+      <div id="card-container"><article class="card" id="rounded-card">
         <div class="icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-label="Leaf"><path d="M20 4C10 3 4 8 5 14c1 7 12 7 15-10Z" stroke="currentColor" stroke-width="1.6"/><path d="m5 20 10-10" stroke="currentColor" stroke-width="1.6"/></svg></div>
         <h2>Your next chapter</h2><p>A calm place for your ideas.<br>Built around the way you work.</p>
         <ul><li><span>Projects</span><strong>Unlimited</strong></li><li><span>Personal workspace</span><strong>Included</strong></li></ul>
         <button id="counter-button"><span>Start creating</span><span aria-hidden="true">↗</span></button>
-      </article>
+      </article></div>
       <aside class="checks">
         <h2>Interaction checks</h2><output id="counter" aria-live="polite">Button clicks: 0</output>
         <button id="open-modal">Open modal</button><br><a class="button" href="#destination" id="navigation-link">Jump to section</a>
+        <label for="capture-case">Card appearance</label>
+        <select id="capture-case">
+          <option value="">Rounded</option><option value="corners">Unequal corners</option>
+          <option value="ellipse">Elliptical corners</option><option value="transparent">Transparent wrapper</option>
+          <option value="opacity">Partial opacity</option><option value="scale">Scaled ancestor</option>
+          <option value="zoom">CSS zoom</option><option value="clipped">Clipped by container</option>
+          <option value="rotated">Rotated</option>
+        </select>
+        <label><input type="checkbox" id="scroll-toggle"> Scroll a separate panel</label>
+        <div id="independent-scroll"><div style="height:240px">Today’s focus<br>Build something useful.<br>Keep it simple.</div></div>
         <p>Hover nested text or the icon, then use ↑ to choose the card. Grabbing must leave the click count unchanged.</p>
       </aside>
     </div>
@@ -58,6 +72,29 @@
     document.querySelector('#counter-button').addEventListener('click', () => { document.querySelector('#counter').textContent = `Button clicks: ${++clicks}`; });
     document.querySelector('#open-modal').addEventListener('click', () => document.querySelector('#modal').showModal());
     document.querySelector('#close-modal').addEventListener('click', () => document.querySelector('#modal').close());
+    document.querySelector('#capture-case').addEventListener('change', event => {
+      const card = document.querySelector('#rounded-card');
+      const container = document.querySelector('#card-container');
+      card.style.cssText = '';
+      container.style.cssText = '';
+      const kind = event.target.value;
+      if (kind === 'corners') card.style.borderRadius = '36px 8px 24px 0';
+      if (kind === 'ellipse') card.style.borderRadius = '15% / 8%';
+      if (kind === 'transparent') card.style.background = 'transparent';
+      if (kind === 'opacity') card.style.opacity = '.85';
+      if (kind === 'scale') container.style.cssText = 'transform:scale(.85,.9);transform-origin:top left;overflow:hidden';
+      if (kind === 'zoom') container.style.zoom = '.9';
+      if (kind === 'clipped') container.style.cssText = 'height:220px;overflow:hidden';
+      if (kind === 'rotated') card.style.transform = 'rotate(3deg)';
+    });
+    let scrollTimer;
+    document.querySelector('#scroll-toggle').addEventListener('change', event => {
+      clearInterval(scrollTimer);
+      if (event.target.checked) scrollTimer = setInterval(() => {
+        const panel = document.querySelector('#independent-scroll');
+        panel.scrollTop = panel.scrollTop >= 180 ? 0 : panel.scrollTop + 4;
+      }, 30);
+    });
   </script>
 </body>
 </html>

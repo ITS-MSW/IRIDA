@@ -5,12 +5,13 @@ import { PickerHint } from '../../components/PickerHint';
 import { PreviewDialog, type ResultState } from '../../components/PreviewDialog';
 import { captureSubject, savePng } from '../capture/client';
 import { sameBounds } from '../capture/geometry';
-import { inspectTarget, validateSnapshot, type TargetSnapshot } from '../capture/target';
+import { inspectTarget, isCaptureScroll, validateSnapshot, type TargetSnapshot } from '../capture/target';
+import { defaultSettings, presetFor, type ShowcaseSettings } from '../compositor/default-preset';
 import { renderShowcase } from '../compositor/render-showcase';
 import { matchesRequest, type RequestId, type CaptureMessage } from '../messaging';
 import { composedParent, elementAtPoint, elementBounds, freshBounds, isUseful } from './react-grab-adapter';
 
-type State = { phase: 'idle' } | { phase: 'picking' } | ResultState;
+type State = { phase: 'idle' } | { phase: 'picking'; issue?: string } | ResultState;
 interface CaptureJob extends RequestId {
   target: Element;
   snapshot: TargetSnapshot;
@@ -47,9 +48,14 @@ export class PickerController {
   private hoverOrigin?: { x: number; y: number };
   private frame = 0;
   private lastOutline = '';
+  private checkedTarget: Element | null = null;
+  private checkedAt = 0;
+  private checkedSnapshot?: TargetSnapshot;
   private activeEvents?: AbortController;
   private pickingEvents?: AbortController;
   private job?: CaptureJob;
+  private subject?: Awaited<ReturnType<typeof captureSubject>>;
+  private revision = 0;
   private previousFocus: Element | null = null;
 
   constructor(private ctx: ContentScriptContext, private css: string) {}
@@ -61,6 +67,9 @@ export class PickerController {
 
   close(restoreFocus = true) {
     this.sessionId = '';
+    this.revision++;
+    if (this.subject) this.subject.canvas.width = this.subject.canvas.height = 1;
+    this.subject = undefined;
     this.stopCapture();
     this.stopPicking();
     this.activeEvents?.abort();
@@ -68,6 +77,9 @@ export class PickerController {
     this.state = { phase: 'idle' };
     this.ui?.remove();
     this.target = null;
+    this.checkedTarget = null;
+    this.checkedSnapshot = undefined;
+    this.checkedAt = 0;
     this.parents = [];
     this.pointer = this.hoverOrigin = undefined;
     if (restoreFocus && this.previousFocus instanceof HTMLElement && this.previousFocus.isConnected) {
@@ -114,10 +126,11 @@ export class PickerController {
 
   private render() {
     if (this.state.phase === 'idle') return;
-    if (this.state.phase === 'picking') this.root?.render(<PickerHint />);
+    if (this.state.phase === 'picking') this.root?.render(<PickerHint issue={this.state.issue} />);
     else this.root?.render(<PreviewDialog state={this.state} onClose={() => this.close()}
       onAgain={() => { void this.startPicking().catch(error => this.showError(error)); }}
-      onSave={() => { if (this.state.phase === 'preview' && this.ui) savePng(this.state.blob, this.ui.uiContainer); }} />);
+      onSettings={settings => { void this.updateSettings(settings); }}
+      onSave={() => { if (this.state.phase === 'preview' && !this.state.updating && !this.state.updateError && this.ui) savePng(this.state.blob, this.ui.uiContainer); }} />);
   }
 
   private async startPicking() {
@@ -189,12 +202,26 @@ export class PickerController {
       this.parents = [];
     }
     if (this.target && !isUseful(this.target, this.ui.shadowHost)) this.target = null;
+    // Preflight is throttled independently of the smooth outline. React only
+    // rerenders when the guidance changes, not on every pointer/layout frame.
+    if (this.target !== this.checkedTarget || performance.now() - this.checkedAt >= 120) {
+      this.checkedTarget = this.target;
+      this.checkedAt = performance.now();
+      this.checkedSnapshot = undefined;
+      let issue: string | undefined;
+      try { if (this.target) this.checkedSnapshot = inspectTarget(this.target); }
+      catch (error) { issue = error instanceof Error ? error.message : 'Choose another element.'; }
+      this.setPickingIssue(issue);
+    }
     const bounds = this.target && elementBounds(this.target);
     if (this.outline && this.label) {
       this.outline.hidden = this.label.hidden = !bounds;
       if (bounds && this.target) {
-        const style = `left:${bounds.x}px;top:${bounds.y}px;width:${bounds.width}px;height:${bounds.height}px;border-radius:${bounds.borderRadius}`;
+        const radii = this.checkedSnapshot?.radii;
+        const radius = radii ? `${radii.map(r => `${r.x}px`).join(' ')} / ${radii.map(r => `${r.y}px`).join(' ')}` : bounds.borderRadius;
+        const style = `left:${bounds.x}px;top:${bounds.y}px;width:${bounds.width}px;height:${bounds.height}px;border-radius:${radius}`;
         if (this.lastOutline !== style) { this.outline.style.cssText = style; this.lastOutline = style; }
+        this.outline.dataset.invalid = String(Boolean(this.state.issue));
         this.label.style.left = `${Math.max(8, Math.min(bounds.x, innerWidth - 190))}px`;
         this.label.style.top = `${bounds.y >= 35 ? bounds.y - 30 : Math.min(innerHeight - 32, bounds.y + bounds.height + 7)}px`;
         const text = `${this.target.tagName.toLowerCase()} · ${Math.round(bounds.width)} × ${Math.round(bounds.height)}`;
@@ -203,6 +230,12 @@ export class PickerController {
     }
     this.frame = requestAnimationFrame(this.tick);
   };
+
+  private setPickingIssue(issue?: string) {
+    if (this.state.phase !== 'picking' || this.state.issue === issue) return;
+    this.state = { phase: 'picking', issue };
+    this.render();
+  }
 
   private stopPicking() { cancelAnimationFrame(this.frame); this.pickingEvents?.abort(); }
   private stopCapture() {
@@ -229,7 +262,8 @@ export class PickerController {
       job.abort.abort();
     };
     const signal = job.abort.signal;
-    for (const event of ['scroll', 'resize', 'popstate', 'hashchange']) window.addEventListener(event, fail, { capture: true, passive: true, signal });
+    window.addEventListener('scroll', event => { if (isCaptureScroll(job.target, event)) fail(); }, { capture: true, passive: true, signal });
+    for (const event of ['resize', 'popstate', 'hashchange']) window.addEventListener(event, fail, { capture: true, passive: true, signal });
     document.addEventListener('visibilitychange', fail, { signal });
     window.visualViewport?.addEventListener('resize', fail, { signal });
     window.visualViewport?.addEventListener('scroll', fail, { signal });
@@ -265,12 +299,36 @@ export class PickerController {
       this.show();
       const result = await renderShowcase(subject.canvas, subject.scaleX, subject.scaleY);
       if (this.sessionId !== sessionId) return;
-      this.state = { phase: 'preview', ...result, url: URL.createObjectURL(result.blob) };
+      this.subject = subject;
+      subject = undefined;
+      this.state = { phase: 'preview', ...result, url: URL.createObjectURL(result.blob), settings: { ...defaultSettings }, updating: false };
       this.render();
     } catch (error) {
       if (this.sessionId !== sessionId) return;
+      if (this.state.phase === 'picking') {
+        this.setPickingIssue(error instanceof Error ? error.message : 'Choose another element.');
+        return;
+      }
       this.showError(this.job?.failure ?? error);
     } finally { if (subject) subject.canvas.width = subject.canvas.height = 1; }
+  }
+
+  private async updateSettings(settings: ShowcaseSettings) {
+    if (this.state.phase !== 'preview' || !this.subject) return;
+    const revision = ++this.revision;
+    const subject = this.subject;
+    this.state = { ...this.state, settings, updating: true, updateError: undefined };
+    this.render();
+    try {
+      const result = await renderShowcase(subject.canvas, subject.scaleX, subject.scaleY, presetFor(settings));
+      if (revision !== this.revision || this.state.phase !== 'preview') return;
+      URL.revokeObjectURL(this.state.url);
+      this.state = { phase: 'preview', ...result, url: URL.createObjectURL(result.blob), settings, updating: false };
+    } catch {
+      if (revision !== this.revision || this.state.phase !== 'preview') return;
+      this.state = { ...this.state, updating: false, updateError: 'Couldn’t update the image. Adjust a setting to try again.' };
+    }
+    this.render();
   }
 
   private showError(error: unknown) {
